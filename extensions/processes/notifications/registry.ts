@@ -95,7 +95,12 @@ export interface WatchUpdateResult {
 }
 
 export interface NotificationRegistry {
-  register(processId: string, config: NotifyConfig): void;
+  register(
+    processId: string,
+    config: NotifyConfig,
+    parentToolCallId?: string,
+  ): void;
+  getParentToolCallId(processId: string): string | undefined;
   unregister(processId: string): void;
   get(processId: string): NotifyConfig | null;
   markIntentionalStop(processId: string): void;
@@ -119,6 +124,7 @@ export interface NotificationRegistry {
 
 export function createNotificationRegistry(): NotificationRegistry {
   const configs = new Map<string, NotifyConfig>();
+  const parentToolCallIds = new Map<string, string>();
   const intentionalStops = new Set<string>();
   const watchMeta = new Map<string, WatchMeta>();
 
@@ -145,13 +151,24 @@ export function createNotificationRegistry(): NotificationRegistry {
   }
 
   return {
-    register(processId: string, config: NotifyConfig): void {
+    register(
+      processId: string,
+      config: NotifyConfig,
+      parentToolCallId?: string,
+    ): void {
       configs.set(processId, config);
+      if (parentToolCallId) parentToolCallIds.set(processId, parentToolCallId);
+      else parentToolCallIds.delete(processId);
       watchMeta.set(processId, { revision: 0, generation: 0 });
+    },
+
+    getParentToolCallId(processId: string): string | undefined {
+      return parentToolCallIds.get(processId);
     },
 
     unregister(processId: string): void {
       configs.delete(processId);
+      parentToolCallIds.delete(processId);
       intentionalStops.delete(processId);
       watchMeta.delete(processId);
     },
@@ -170,6 +187,7 @@ export function createNotificationRegistry(): NotificationRegistry {
 
     clear(): void {
       configs.clear();
+      parentToolCallIds.clear();
       intentionalStops.clear();
       watchMeta.clear();
     },

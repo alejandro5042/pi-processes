@@ -84,6 +84,12 @@ in the UI as soon as Pi appends it (immediately when idle, at the turn's tool
 boundary while running) and participates in model context from the next
 provider request on — no user prompt required.
 
+### Activity ownership
+
+The process start tool records the originating visible tool call ID in the notification registry. Direct starts use their own tool call ID; nested starts resolve their outermost parent through Pi's `tool_call` metadata because nested calls have no native transcript component. Lifecycle and log-match payloads carry this ID as `parentToolCallId`, so persisted custom messages expose it at `message.details.parentToolCallId`. pi-stereo-view uses that field to project late process output beside its owning tool in Activity without changing model delivery or attention levels.
+
+Ownership is captured when the process starts, not from whatever tool happens to run when output arrives. It is removed with the process's notification registration after exit or session cleanup. Unowned processes and the aggregate log-match suppression summary remain unlinked rather than guessing an unrelated parent.
+
 ## Lifecycle notifications
 
 `NotificationService.handleProcessEnded` runs on every `process_ended` event

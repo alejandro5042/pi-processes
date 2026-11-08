@@ -120,7 +120,7 @@
       "properties": {
         "showStatusWidget": {
           "type": "boolean",
-          "description": "Show a one-line process summary below the editor."
+          "description": "Show a process summary inline in the shared footer."
         },
         "dockDefaultState": {
           "type": "string",

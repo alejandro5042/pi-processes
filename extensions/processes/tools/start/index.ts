@@ -12,6 +12,7 @@ export function executeStart(
   manager: ProcessManager,
   ctx: ExtensionContext,
   notifications: NotificationRegistry,
+  parentToolCallId?: string,
 ): StartDetails {
   if (!params.name) {
     throw new Error("process start requires name");
@@ -30,7 +31,7 @@ export function executeStart(
     cwd,
     buildSessionEnv(ctx),
   );
-  notifications.register(process.id, notify);
+  notifications.register(process.id, notify, parentToolCallId);
 
   return {
     action: "start",

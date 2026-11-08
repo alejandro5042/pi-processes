@@ -172,6 +172,11 @@ export function createNotificationService(deps: NotificationServiceDeps): {
     }
   }
 
+  function parentDetails(processId: string): { parentToolCallId?: string } {
+    const parentToolCallId = registry.getParentToolCallId(processId);
+    return parentToolCallId ? { parentToolCallId } : {};
+  }
+
   function buildLifecycleDetails(
     info: ProcessInfo,
     kind: ProcessNotificationKind,
@@ -215,6 +220,7 @@ export function createNotificationService(deps: NotificationServiceDeps): {
       endReason: info.endReason,
       signal: info.signal,
       attention,
+      ...parentDetails(info.id),
     };
   }
 
@@ -245,6 +251,7 @@ export function createNotificationService(deps: NotificationServiceDeps): {
         matcherIndex: match.matcherIndex,
       },
       attention,
+      ...parentDetails(processId),
     };
   }
 

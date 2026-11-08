@@ -60,6 +60,10 @@ function defaultConfig(): ProcessProtocolConfig {
 interface Harness {
   widgetState: Map<string, "visible" | "hidden">;
   widgetContent: Map<string, unknown>;
+  statuses: Map<string, string | undefined>;
+  config: ProcessProtocolConfig;
+  refresh: () => void;
+  clearProcesses: () => void;
   emitStarted: (info: ProcessInfo) => void;
   emitEnded: (info: ProcessInfo) => void;
   emitPin: (id: string | null) => CommandPinResult;
@@ -70,11 +74,19 @@ function createHarness(): Harness {
   const events: EventBus = createEventBus();
   const widgetState = new Map<string, "visible" | "hidden">();
   const widgetContent = new Map<string, unknown>();
+  const statuses = new Map<string, string | undefined>();
 
   let processList: ProcessInfo[] = [];
   const config = defaultConfig();
 
   const ui: ExtensionUIContext = {
+    theme: {
+      fg: (_color: string, text: string) => `\u001b[31m${text}\u001b[39m`,
+      bg: (_color: string, text: string) => text,
+    } as ExtensionUIContext["theme"],
+    setStatus: (key: string, text: string | undefined) => {
+      statuses.set(key, text);
+    },
     setWidget: ((key: string, content: unknown, _options?: unknown) => {
       widgetState.set(key, content === undefined ? "hidden" : "visible");
       widgetContent.set(key, content);
@@ -119,6 +131,13 @@ function createHarness(): Harness {
   return {
     widgetState,
     widgetContent,
+    statuses,
+    config,
+    refresh: () => controller?.refresh(),
+    clearProcesses: () => {
+      processList = [];
+      events.emit(CHANNELS.CHANGED, { reason: "cleared" });
+    },
     emitStarted: (info: ProcessInfo) => {
       upsertProcess(info);
       events.emit(CHANNELS.STARTED, info);
@@ -152,18 +171,7 @@ function dockIsVisible(h: Harness): boolean {
 }
 
 function statusLine(h: Harness): string | null {
-  const factory = h.widgetContent.get(STATUS_KEY) as
-    | ((
-        tui: unknown,
-        theme: unknown,
-      ) => { render: (width: number) => string[] })
-    | undefined;
-  if (!factory) return null;
-  const theme = {
-    fg: (color: string, text: string) => `{${color}:${text}}`,
-    bg: (_color: string, text: string) => text,
-  };
-  return factory(null, theme).render(200)[0] ?? null;
+  return h.statuses.get(STATUS_KEY) ?? null;
 }
 
 describe("dock auto-close", () => {
@@ -278,12 +286,93 @@ describe("dock auto-close", () => {
   });
 });
 
-describe("status widget pending terminal processes", () => {
+describe("inline footer status", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("publishes through setStatus without creating a separate status widget", () => {
+    const h = createHarness();
+    try {
+      expect(statusLine(h)).toBeNull();
+      h.emitStarted(makeProcess({ name: "server" }));
+      vi.advanceTimersByTime(130);
+
+      expect(statusLine(h)).toBe("ps: ● server");
+      expect(statusLine(h)).not.toContain("\u001b");
+      expect(h.widgetContent.has(STATUS_KEY)).toBe(false);
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it("clears the footer status when disabled and restores it when enabled", () => {
+    const h = createHarness();
+    try {
+      h.emitStarted(makeProcess());
+      vi.advanceTimersByTime(130);
+      expect(statusLine(h)).toContain("quick");
+
+      h.config.widget.showStatusWidget = false;
+      h.refresh();
+      expect(statusLine(h)).toBeNull();
+
+      h.config.widget.showStatusWidget = true;
+      h.refresh();
+      expect(statusLine(h)).toContain("quick");
+      expect(h.widgetContent.has(STATUS_KEY)).toBe(false);
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it("clears the footer status when the process list becomes empty", () => {
+    const h = createHarness();
+    try {
+      h.emitStarted(makeProcess());
+      vi.advanceTimersByTime(130);
+      expect(statusLine(h)).not.toBeNull();
+
+      h.clearProcesses();
+      vi.advanceTimersByTime(130);
+      expect(statusLine(h)).toBeNull();
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it("clears only its own footer status on disposal", () => {
+    const h = createHarness();
+    h.statuses.set("usage", "unrelated usage");
+    h.emitStarted(makeProcess());
+    vi.advanceTimersByTime(130);
+
+    h.dispose();
+    h.dispose();
+
+    expect(statusLine(h)).toBeNull();
+    expect(h.statuses.get("usage")).toBe("unrelated usage");
+    expect(h.widgetContent.has(STATUS_KEY)).toBe(false);
+  });
+
+  it("leaves summary width to the footer instead of dropping later processes", () => {
+    const h = createHarness();
+    try {
+      for (let index = 0; index < 20; index++) {
+        h.emitStarted(
+          makeProcess({ id: `proc_${index}`, name: `server-${index}` }),
+        );
+      }
+      vi.advanceTimersByTime(130);
+
+      expect(statusLine(h)).toContain("server-19");
+      expect(statusLine(h)).not.toContain("more");
+    } finally {
+      h.dispose();
+    }
   });
 
   it("keeps a failed process visible until the next process starts, then folds it", () => {
@@ -301,13 +390,13 @@ describe("status widget pending terminal processes", () => {
         }),
       );
       vi.advanceTimersByTime(130);
-      expect(statusLine(h)).toContain("{error:lint}");
+      expect(statusLine(h)).toContain("! lint");
 
       h.emitStarted(
         makeProcess({ id: "proc_2", name: "dev", startTime: 3000 }),
       );
       vi.advanceTimersByTime(130);
-      expect(statusLine(h)).toContain("{error:!}");
+      expect(statusLine(h)).toContain("!");
       expect(statusLine(h)).toContain("1 failed");
       expect(statusLine(h)).not.toContain("lint");
     } finally {
@@ -335,7 +424,7 @@ describe("status widget pending terminal processes", () => {
         makeProcess({ id: "proc_2", name: "dev", startTime: 3000 }),
       );
       vi.advanceTimersByTime(130);
-      expect(statusLine(h)).toContain("{dim:■}");
+      expect(statusLine(h)).toContain("■");
       expect(statusLine(h)).toContain("1 killed");
       expect(statusLine(h)).not.toContain("server");
     } finally {

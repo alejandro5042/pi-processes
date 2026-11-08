@@ -52,4 +52,6 @@ export interface ProcessProtocolNotificationPayload {
   signal?: ProcessSignalInfo | null;
   logMatch?: ProcessProtocolNotificationLogMatch;
   attention: ProcessProtocolAttention;
+  /** Visible originating tool call, used to group late output in Activity. */
+  parentToolCallId?: string;
 }

@@ -20,6 +20,7 @@ const details: ProcessNotificationDetails = {
   endReason: "exit",
   signal: null,
   attention: "turn",
+  parentToolCallId: "process-start-call",
 };
 
 const options = {
@@ -44,7 +45,7 @@ describe("attentionToSendOptions", () => {
 });
 
 describe("sendProcessNotificationMessage", () => {
-  it("sends a displayed process notification custom message", () => {
+  it("preserves parentToolCallId in displayed custom message details", () => {
     const sendMessage = vi.fn();
 
     sendProcessNotificationMessage(

@@ -3,9 +3,10 @@ import type {
   ExtensionContext,
   Theme,
 } from "@earendil-works/pi-coding-agent";
-import type {
-  TuiMouseEvent,
-  TuiMouseEventResult,
+import {
+  stripTerminalSequences,
+  type TuiMouseEvent,
+  type TuiMouseEventResult,
 } from "@earendil-works/pi-tui";
 import { LIVE_STATUSES, type ProcessInfo } from "../../../src/types";
 import { buildDroppedOutputLine, trimToBudget } from "../../shared/line-buffer";
@@ -30,7 +31,7 @@ import { renderStatusWidget } from "./status";
 import type { DockActions, DockState } from "./types";
 
 const DOCK_WIDGET_KEY = "processes-dock";
-const STATUS_WIDGET_KEY = "processes-status";
+const STATUS_KEY = "processes-status";
 const MAX_NOTIFY_MARKERS_PER_PROCESS = 100;
 const MAX_PREVIEW_PROCESSES = 8;
 const REFRESH_THROTTLE_MS = 125;
@@ -142,32 +143,22 @@ export function setupDockWidgets(
 
   const renderStatus = () => {
     if (disposed) return;
-    // Re-read config live so toggling showStatusWidget in /ps:settings takes
-    // effect without a restart.
+    // Keep the existing setting, but publish through the shared footer API
+    // instead of reserving a separate below-editor row. The footer owns width.
     const liveConfig = requestConfig(events);
-    if (!liveConfig.widget.showStatusWidget) {
-      ctx.ui.setWidget(STATUS_WIDGET_KEY, undefined, {
-        placement: "belowEditor",
-      });
-      return;
-    }
-    if (processes.length === 0) {
-      ctx.ui.setWidget(STATUS_WIDGET_KEY, undefined, {
-        placement: "belowEditor",
-      });
-      return;
-    }
-    // The width is only known at render time, so hand Pi a factory that
-    // renders against the actual belowEditor column count instead of baking a
-    // static width from process.stdout.columns (which drifts on resize / splits).
-    ctx.ui.setWidget(
-      STATUS_WIDGET_KEY,
-      (_tui, theme: Theme) => ({
-        render: (width: number) =>
-          renderStatusWidget(processes, theme, width, pendingTerminalIds),
-        invalidate: () => undefined,
-      }),
-      { placement: "belowEditor" },
+    const status = liveConfig.widget.showStatusWidget
+      ? renderStatusWidget(
+          processes,
+          ctx.ui.theme,
+          Number.POSITIVE_INFINITY,
+          pendingTerminalIds,
+        )[0]
+      : undefined;
+    // Stored ANSI colors would outlive theme changes. Let the active footer
+    // style this text at render time; the status glyphs still encode state.
+    ctx.ui.setStatus(
+      STATUS_KEY,
+      status === undefined ? undefined : stripTerminalSequences(status),
     );
   };
 
@@ -484,9 +475,7 @@ export function setupDockWidgets(
       ctx.ui.setWidget(DOCK_WIDGET_KEY, undefined, {
         placement: "aboveEditor",
       });
-      ctx.ui.setWidget(STATUS_WIDGET_KEY, undefined, {
-        placement: "belowEditor",
-      });
+      ctx.ui.setStatus(STATUS_KEY, undefined);
     },
   };
 }

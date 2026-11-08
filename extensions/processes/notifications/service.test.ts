@@ -71,6 +71,80 @@ function createNotificationSpy(): {
 }
 
 describe("NotificationService", () => {
+  it.each([false, true])(
+    "retains the start owner on exit (intentional=%s) before clearing it",
+    async (intentional) => {
+      const fakeManager = createFakeManager();
+      const spy = createNotificationSpy();
+      const registry = createNotificationRegistry();
+      const service = createNotificationService({
+        events: spy.events,
+        manager: fakeManager as never,
+        registry,
+        getProcess: () => null,
+      });
+      try {
+        fakeManager.emit({ type: "process_ended", info: makeInfo() });
+        // Registration still wins for a synchronous missing-pid/start failure.
+        registry.register("proc_1", {}, "start-owner");
+        if (intentional) registry.markIntentionalStop("proc_1");
+        await flushQueuedMicrotasks();
+
+        expect(spy.emitted[0]).toMatchObject({
+          processId: "proc_1",
+          parentToolCallId: "start-owner",
+        });
+        expect(registry.getParentToolCallId("proc_1")).toBeUndefined();
+      } finally {
+        service.dispose();
+      }
+    },
+  );
+
+  it("keeps independent owners on interleaved log matches", () => {
+    const fakeManager = createFakeManager();
+    const spy = createNotificationSpy();
+    const registry = createNotificationRegistry();
+    const service = createNotificationService({
+      events: spy.events,
+      manager: fakeManager as never,
+      registry,
+      getProcess: (id) => makeInfo({ id, status: "running" }),
+    });
+    try {
+      for (const id of ["proc_1", "proc_2"]) {
+        registry.register(
+          id,
+          { logMatches: [{ pattern: "ready", on: "context" }] },
+          `owner-${id}`,
+        );
+      }
+      for (const id of ["proc_2", "proc_1"]) {
+        fakeManager.emit({
+          type: "process_output_changed",
+          id,
+          appendedText: [{ type: "stdout", text: "ready" }],
+        });
+      }
+      expect(spy.emitted).toMatchObject([
+        {
+          kind: "log_match",
+          processId: "proc_2",
+          parentToolCallId: "owner-proc_2",
+          attention: "context",
+        },
+        {
+          kind: "log_match",
+          processId: "proc_1",
+          parentToolCallId: "owner-proc_1",
+          attention: "context",
+        },
+      ]);
+    } finally {
+      service.dispose();
+    }
+  });
+
   it("emits a turn notification for a failed process with default config", async () => {
     const fakeManager = createFakeManager();
     const spy = createNotificationSpy();

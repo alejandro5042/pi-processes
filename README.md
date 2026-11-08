@@ -45,6 +45,8 @@ Pi does not wait around for a background process. After it starts one, it keeps 
 
 That is how Pi can start a dev server and then keep coding, or run a test watcher and react when a test fails, without sleeping or polling. If a watch fires too often, Pi can quiet it without restarting the process.
 
+Lifecycle and log-watch messages retain the originating tool call as `details.parentToolCallId`. Compatible split-view extensions, including pi-stereo-view, group this late output with its tool in Activity instead of treating it as unrelated chat.
+
 ## Open the process panel
 
 Use `/ps` to open the main process panel. It shows running and finished processes, with the most recent output preview. The preview opens on the newest page so you can see live activity without scrolling.
@@ -85,11 +87,11 @@ Use `/ps:kill [id]` to stop a running process, and `/ps:clear` to remove finishe
 
 `/ps:clear` never touches live processes.
 
-## Keep a status line in view
+## Keep process status in the shared footer
 
-Enable the status widget in `/ps:settings` to show a compact line below the editor. Live processes show as a status dot plus name; finished processes fold into `✓ N done`, `! N failed`, and `■ N killed` summaries (a recent failure stays visible by name until the next process starts). `+N more` overflow appears when the line does not fit.
+Enable **Footer status** in `/ps:settings` to show the process summary inline with other extension statuses, rather than in a separate row below the editor. Live processes show as a status dot plus name; finished processes fold into `✓ N done`, `! N failed`, and `■ N killed` summaries (a recent failure stays visible by name until the next process starts). Your active footer controls wrapping and available width.
 
-It is disabled by default. The widget reflows on resize and clears itself when the process list is empty.
+It is disabled by default and clears itself when the process list is empty. Existing `widget.showStatusWidget` settings continue to control this status. The log dock above the editor is unchanged.
 
 ## Send input to a process
 
@@ -105,7 +107,7 @@ Available settings include:
 
 - shell path override
 - blocking shell background patterns (`&`, `nohup`, `disown`, `setsid`) in bash calls, redirecting Pi to the process tool
-- status widget toggle
+- inline footer status toggle
 - process panel size
 - log overlay size, history limits, follow mode, and auto-hide
 - dock default state and line count

@@ -52,6 +52,26 @@ export function registerProcessTool(
   manager: ProcessManager,
   notifications: NotificationRegistry,
 ): void {
+  // Nested executions have no native transcript component. Link their late
+  // notifications to the outermost visible call (for example codemode).
+  const toolParents = new Map<string, string>();
+  pi.on("tool_call", (event) => {
+    if (event.parentToolCallId) {
+      toolParents.set(
+        event.toolCallId,
+        toolParents.get(event.parentToolCallId) ?? event.parentToolCallId,
+      );
+    }
+  });
+  pi.on("tool_result", (event) => {
+    toolParents.delete(event.toolCallId);
+  });
+  // Blocked/aborted nested calls still end, but may never emit tool_result.
+  pi.on("tool_execution_end", (event) => {
+    toolParents.delete(event.toolCallId);
+  });
+  pi.on("session_shutdown", () => toolParents.clear());
+
   pi.registerTool(
     defineTool({
       name: "process",
@@ -69,7 +89,7 @@ export function registerProcessTool(
       ],
       parameters: ProcessesParams,
       outputSchema: ProcessToolOutputSchema,
-      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      async execute(toolCallId, params, _signal, _onUpdate, ctx) {
         if (params.action === "output") {
           const result = executeOutput(params, manager);
           return {
@@ -82,7 +102,13 @@ export function registerProcessTool(
           };
         }
 
-        const details = await execute(params, manager, ctx, notifications);
+        const details = await execute(
+          params,
+          manager,
+          ctx,
+          notifications,
+          toolParents.get(toolCallId) ?? toolCallId,
+        );
         return {
           content: [{ type: "text", text: formatDetails(details) }],
           details,
@@ -100,10 +126,17 @@ async function execute(
   manager: ProcessManager,
   ctx: ExtensionContext,
   notifications: NotificationRegistry,
+  parentToolCallId: string,
 ): Promise<Exclude<ProcessDetails, OutputDetails>> {
   switch (params.action) {
     case "start":
-      return executeStart(params, manager, ctx, notifications);
+      return executeStart(
+        params,
+        manager,
+        ctx,
+        notifications,
+        parentToolCallId,
+      );
     case "list":
       return executeList(manager, params, notifications);
     case "stop":

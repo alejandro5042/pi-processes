@@ -48,8 +48,8 @@ export function buildSections(
     items: [
       boolItem(
         "widget.showStatusWidget",
-        "Status widget",
-        "Show a one-line summary of managed processes below the editor.",
+        "Footer status",
+        "Show a summary of managed processes inline in the shared footer.",
         scopedConfig.widget?.showStatusWidget,
         resolved.widget.showStatusWidget,
       ),

@@ -41,7 +41,7 @@ export interface FollowConfig {
 }
 
 export interface WidgetConfig {
-  /** Show a one-line process summary below the editor. */
+  /** Show a process summary inline in the shared footer. */
   showStatusWidget?: boolean;
   /** Initial visibility of the process dock. */
   dockDefaultState?: "closed" | "collapsed" | "expanded";

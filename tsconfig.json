@@ -3,6 +3,11 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    // Pi supplies these peers to extensions, including linked dependencies.
+    "paths": {
+      "@earendil-works/*": ["./node_modules/@earendil-works/*"],
+      "typebox": ["./node_modules/typebox"]
+    },
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
